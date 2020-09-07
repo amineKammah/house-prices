@@ -2,15 +2,16 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import PowerTransformer
 
 import numpy as np
+import pandas as pd
 
 
 class ContinuousFeaturesImputer(BaseEstimator, TransformerMixin):
-    def __init__(self, create_is_0=False, impute_zeros=False, drop_features=False, keep_outliers=False,
+    def __init__(self, create_is_0=False, impute_zeros=False, drop_features=False, drop_outliers=False,
                  sensitivity=2.8):
         self.create_is_0 = create_is_0
         self.impute_zeros = impute_zeros
         self.drop_features = drop_features
-        self.keep_outliers = keep_outliers
+        self.drop_outliers = drop_outliers
         self.sensitivity = sensitivity
 
         self._high_percentage_0 = []
@@ -18,7 +19,7 @@ class ContinuousFeaturesImputer(BaseEstimator, TransformerMixin):
         self._means = dict()
         self._z_scores = dict()
 
-    def fit(self, X, y):
+    def fit(self, X, y=None):
         X = X.copy()
 
         self._high_percentage_0 = X.columns[((X == 0).sum() / X.shape[0]) > 0.3]
@@ -37,8 +38,11 @@ class ContinuousFeaturesImputer(BaseEstimator, TransformerMixin):
             X = X.drop(self._high_percentage_0, axis=1)
 
         self._power_transformer = PowerTransformer().fit(X)
+        col_names = X.columns
+        index = X.index
+        X = pd.DataFrame(self._power_transformer.transform(X), columns=col_names, index=index)
 
-        if not self.keep_outliers:
+        if self.drop_outliers:
             self._z_scores = {}
             for feature in X.columns:
                 mean, std = X[feature].mean(), X[feature].std()
@@ -47,7 +51,7 @@ class ContinuousFeaturesImputer(BaseEstimator, TransformerMixin):
 
         return self
 
-    def transform(self, X, y):
+    def transform(self, X, y=None):
         X = X.copy()
 
         if self.create_is_0:
@@ -60,9 +64,11 @@ class ContinuousFeaturesImputer(BaseEstimator, TransformerMixin):
         if self.drop_features:
             X = X.drop(self._high_percentage_0, axis=1)
 
-        X = self._power_transformer.transform(X)
+        col_names = X.columns
+        index = X.index
+        X = pd.DataFrame(self._power_transformer.transform(X), columns=col_names, index=index)
 
-        if not self.keep_outliers:
+        if self.drop_outliers:
             for feature in X.columns:
                 X.loc[:, feature] = np.clip(X[feature], - self.sensitivity * self._z_scores[feature],
                                             self.sensitivity * self._z_scores[feature])
